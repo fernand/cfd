@@ -9,9 +9,9 @@ include_directories(
 )
 
 add_library(glad
-    ThirdParty/glad/glad.c)
+    ThirdParty/glad/gl.c)
 
-add_executable(Main
+add_executable(Main WIN32
     src/Main.cpp
 )
 target_link_directories(Main PRIVATE lib)

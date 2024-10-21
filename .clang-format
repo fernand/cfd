@@ -1,0 +1,6 @@
+BasedOnStyle: Microsoft
+PointerAlignment: Left
+SortIncludes: Never
+IndentWidth: 4
+TabWidth: 4
+ColumnLimit: 100
