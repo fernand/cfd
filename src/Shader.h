@@ -1,5 +1,5 @@
 const char* kComputeShader = R"glsl(
-#version 430 core
+#version 460 core
 
 layout(local_size_x = 16, local_size_y = 16) in;
 
@@ -75,7 +75,7 @@ void main() {
 )glsl";
 
 const char* kFragmentShader = R"glsl(
-#version 430 core
+#version 460 core
 
 out vec4 FragColor;
 
@@ -144,7 +144,7 @@ void main()
 )glsl";
 
 const char* kVertexShader = R"glsl(
-#version 430 core
+#version 460 core
 
 layout(location = 0) in vec2 aPos;
 layout(location = 1) in vec2 aTexCoords;

@@ -40,9 +40,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine,
 
     glfwWindowHint(GLFW_RESIZABLE, false);
     glfwWindowHint(GLFW_DEPTH_BITS, 32);
-    const char* glsl_version = "#version 430";
+    const char* glsl_version = "#version 460";
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
     const int width = 1920;
@@ -95,11 +95,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine,
 
     // SSBO for current distribution functions
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo[0]);
-    glBufferData(GL_SHADER_STORAGE_BUFFER, bufferSize, NULL, GL_DYNAMIC_DRAW);
+    glBufferStorage(GL_SHADER_STORAGE_BUFFER, bufferSize, NULL, GL_DYNAMIC_STORAGE_BIT);
 
     // SSBO for updated distribution functions
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo[1]);
-    glBufferData(GL_SHADER_STORAGE_BUFFER, bufferSize, NULL, GL_DYNAMIC_DRAW);
+    glBufferStorage(GL_SHADER_STORAGE_BUFFER, bufferSize, NULL, GL_DYNAMIC_STORAGE_BIT);
 
     GLuint compute_shader = glCreateShader(GL_COMPUTE_SHADER);
     glShaderSource(compute_shader, 1, &kComputeShader, nullptr);
@@ -142,12 +142,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine,
     }
 
     // Upload the initialized distribution functions to the GPU
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo[0]);
-    glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, bufferSize, f_in.data());
-
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo[1]);
-    glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, bufferSize, f_in.data());
-
+    glNamedBufferSubData(ssbo[0], 0, bufferSize, f_in.data());
+    glNamedBufferSubData(ssbo[1], 0, bufferSize, f_in.data());
 
     GLuint quadVAO, quadVBO, quadEBO;
     glGenVertexArrays(1, &quadVAO);
