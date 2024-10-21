@@ -8,6 +8,11 @@
 
 #include <HandmadeMath.h>
 
+#include <imgui/imgui.h>
+#include <imgui/imgui_stdlib.h>
+#include <imgui/imgui_impl_glfw.h>
+#include <imgui/imgui_impl_opengl3.h>
+
 #define _USE_MATH_DEFINES
 #include <math.h>
 #include <vector>
@@ -40,8 +45,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine,
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-    const int width = 1920 / 2;
-    const int height = 1080 / 2;
+    const int width = 1920;
+    const int height = 1080;
     const GLFWvidmode* mode = glfwGetVideoMode(glfwGetPrimaryMonitor());
     GLFWwindow* window = glfwCreateWindow(width, height, "CFD", nullptr, nullptr);
     if (window == nullptr)
@@ -55,6 +60,18 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine,
     bool glad_err = gladLoadGL(glfwGetProcAddress) == 0;
     if (glad_err)
         return 1;
+
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGuiIO& io = ImGui::GetIO();
+    io.IniFilename = nullptr;
+    const float kFontSize = 32;
+    ImFont* im_font = io.Fonts->AddFontFromFileTTF(R"(C:\Windows\Fonts\SegoeUI.ttf)", kFontSize);
+    IM_ASSERT(im_font != nullptr);
+    ImGui::StyleColorsDark();
+
+    ImGui_ImplGlfw_InitForOpenGL(window, true);
+    ImGui_ImplOpenGL3_Init(glsl_version);
 
     const int num_velocities = 9; // D2Q9 model
 
@@ -192,6 +209,15 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine,
 
         // Swap the SSBOs for the next iteration
         std::swap(ssbo[0], ssbo[1]);
+
+        ImGui_ImplOpenGL3_NewFrame();
+        ImGui_ImplGlfw_NewFrame();
+        ImGui::NewFrame();
+
+        ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
+
+        ImGui::Render();
+        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
         glfwSwapBuffers(window);
         glfwPollEvents();
