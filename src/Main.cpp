@@ -16,10 +16,15 @@
 #include "OpenGLHelpers.h"
 #include "Shader.h"
 
+// clang-format off
 float quadVertices[] = {
     // Positions    // Texture Coords
-    -1.0f, 1.0f,  0.0f, 1.0f, -1.0f, -1.0f, 0.0f, 0.0f,
-    1.0f,  -1.0f, 1.0f, 0.0f, 1.0f,  1.0f,  1.0f, 1.0f};
+    -1.0f,  1.0f,   0.0f, 1.0f, // Top-left
+    -1.0f, -1.0f,    0.0f, 0.0f, // Bottom-left
+    1.0f, -1.0f,    1.0f, 0.0f, // Bottom-right
+    1.0f,  1.0f,    1.0f, 1.0f  // Top-right
+};
+// clang-format on
 
 unsigned int quadIndices[] = {0, 1, 2, 0, 2, 3};
 
@@ -51,7 +56,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine,
     if (glad_err)
         return 1;
 
-    ////////////////
     const int num_velocities = 9; // D2Q9 model
 
     const HMM_Vec2 velocities[9] = {HMM_Vec2{-1, 1},  HMM_Vec2{0, 1},  HMM_Vec2{1, 1},
@@ -87,9 +91,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine,
     glAttachShader(compute_program, compute_shader);
     LinkProgram(compute_program);
 
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssbo[0]);
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, ssbo[1]);
-
     std::vector<float> f_in(width * height * num_velocities);
 
     // Loop over each lattice point
@@ -124,12 +125,16 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine,
     }
 
     // Upload the initialized distribution functions to the GPU
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssbo[0]);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, ssbo[1]);
+
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo[0]);
     glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, bufferSize, f_in.data());
 
-    ////////////////
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo[1]);
+    glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, bufferSize, f_in.data());
 
-    ////////////////
+
     GLuint quadVAO, quadVBO, quadEBO;
     glGenVertexArrays(1, &quadVAO);
     glGenBuffers(1, &quadVBO);
@@ -166,7 +171,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine,
     glAttachShader(render_program, fragment_shader);
     LinkProgram(render_program);
 
-    ////////////////
 
     while (!glfwWindowShouldClose(window))
     {
