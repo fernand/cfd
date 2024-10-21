@@ -125,9 +125,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine,
     }
 
     // Upload the initialized distribution functions to the GPU
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssbo[0]);
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, ssbo[1]);
-
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo[0]);
     glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, bufferSize, f_in.data());
 
@@ -170,7 +167,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine,
     glAttachShader(render_program, vertex_shader);
     glAttachShader(render_program, fragment_shader);
     LinkProgram(render_program);
-
 
     while (!glfwWindowShouldClose(window))
     {
