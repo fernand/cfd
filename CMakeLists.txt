@@ -14,4 +14,5 @@ add_library(glad
 add_executable(Main WIN32
     src/Main.cpp
 )
+target_link_libraries(Main PRIVATE glad)
 target_link_directories(Main PRIVATE lib)
