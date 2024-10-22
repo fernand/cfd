@@ -31,13 +31,11 @@ void main() {
     ivec2 gid = ivec2(gl_GlobalInvocationID.xy);
     int index = gid.y * width + gid.x;
 
-    // Load distribution functions
     float f[9];
     for (int i = 0; i < 9; i++) {
         f[i] = f_in[index * 9 + i];
     }
 
-    // Compute macroscopic variables: density and velocity
     float density = 0.0;
     vec2 velocity = vec2(0.0);
     for (int i = 0; i < 9; i++) {
@@ -86,7 +84,6 @@ uniform int width;
 uniform int height;
 uniform float U0; // Initial maximum speed for normalization
 
-// Access the SSBO (bind to binding point 0)
 layout(std430, binding = 0) buffer DF_In {
     float f_in[];
 };
@@ -112,14 +109,12 @@ void main()
 
     int index = y * width + x;
 
-    // Load distribution functions for this cell
     float f[9];
     for (int i = 0; i < 9; i++)
     {
         f[i] = f_in[index * 9 + i];
     }
 
-    // Compute macroscopic variables: density and velocity
     float density = 0.0;
     vec2 velocity = vec2(0.0);
     for (int i = 0; i < 9; i++)
@@ -129,7 +124,6 @@ void main()
     }
     velocity /= density;
 
-    // Compute speed
     float speed = length(velocity);
 
     // Normalize speed for color mapping
