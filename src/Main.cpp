@@ -91,25 +91,15 @@ void main() {
     velocity /= density;
 
     // Boundary handling goes here
-    if (gid.x == width - 1 || gid.x == 0) { // Left and right boundaries
-        velocity = vec2(-U0, 0.0); // Negative velocity for flow to the left
+    if (gid.x == width - 1) { // Inlet
+        velocity = vec2(-U0, 0.0);
         density = 1.0;
-        // Set equilibrium distribution for inlet
-        for (int i = 0; i < 9; i++) {
-            float velDotC = dot(velocities[i], velocity);
-            float velSq = dot(velocity, velocity);
-            f[i] = weights[i] * density * (1.0 + 3.0 * velDotC + 4.5 * velDotC * velDotC - 1.5 * velSq);
-        }
-    }
-    else if (gid.y == 0 || gid.y == height-1) { // Top and bottom boundaries
-        // No-slip boundary condition (should it be no slip???)
-        velocity = vec2(0.0, 0.0);
-        // Set equilibrium distribution for wall
-        for (int i = 0; i < 9; i++) {
-            float velDotC = dot(velocities[i], velocity);
-            float velSq = dot(velocity, velocity);
-            f[i] = weights[i] * density * (1.0 + 3.0 * velDotC + 4.5 * velDotC * velDotC - 1.5 * velSq);
-        }
+    } else if (gid.x == 0) { // Outlet
+        velocity = vec2(-U0, 0.0);
+        density = 1.0;
+    } else if (gid.y == 0 || gid.y == height-1) { // Top and bottom walls
+        velocity = vec2(-U0, 0.0);
+        density = 1.0;
     }
 
     // Compute equilibrium distribution functions
@@ -202,17 +192,11 @@ void main()
     velocity /= density;
 
     float speed = length(velocity);
-    float vx = velocity.x;
-    float vy = velocity.y;
 
     if (isinf(speed) || isinf(density)) {
         FragColor = vec4(0.0, 0.0, 0.0, 1.0); // Black for invalid values
         return;
     }
-
-    // Normalize speed for color mapping
-    float normalizedSpeed = speed / U0;
-    normalizedSpeed = clamp(normalizedSpeed, 0.0, 1.0);
 
     // Calculate vorticity (curl of velocity) using central differences
     float dvx_dy = 0.0;
@@ -237,8 +221,7 @@ void main()
             vel_right += f_in[idx_right + i] * velocities[i];
             vel_left += f_in[idx_left + i] * velocities[i];
         }
-
-        vel_up /= density_up;
+                vel_up /= density_up;
         vel_down /= density_down;
         vel_right /= density_right;
         vel_left /= density_left;
@@ -248,15 +231,20 @@ void main()
     }
 
     float vorticity = dvx_dy - dvy_dx;
+    float normalizedSpeed = clamp(speed / U0, 0.0, 1.0);
 
-    normalizedSpeed = clamp(speed / U0, 0.0, 1.0);
+    // Modify color mapping to show flow better
+    vec3 color;
+    if (solid) {
+        color = vec3(0.5, 0.5, 0.5);  // Gray for solid
+    } else {
+        // Blue to red color mapping
+        color = vec3(normalizedSpeed, 0.0, 1.0 - normalizedSpeed);
 
-    // Color mapping
-    vec3 color = vec3(normalizedSpeed, 0.0, 1.0 - normalizedSpeed);
-
-    // Add vorticity visualization
-    float vort_intensity = abs(vorticity) * 0.5;
-    color = mix(color, vec3(0.0, 1.0, 0.0) * sign(vorticity), clamp(vort_intensity, 0.0, 0.3));
+        // Add vorticity visualization
+        float vort_intensity = abs(vorticity) * 0.5;
+        color = mix(color, vec3(0.0, 1.0, 0.0) * sign(vorticity), clamp(vort_intensity, 0.0, 0.3));
+    }
 
     FragColor = vec4(color, 1.0);
 }
@@ -380,7 +368,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine,
     glAttachShader(compute_program, compute_shader);
     LinkProgram(compute_program);
 
-    float U0 = 0.1f;               // Flow velocity
+    float U0 = 0.05f;              // Initial flow velocity
     const float L = width / 10.0f; // Characteristic length
     const float Re = 100.0f;       // Reynolds number
     float nu = U0 * L / Re;        // kinematic viscosity
@@ -400,13 +388,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine,
             float ux = ux0;
             float uy = uy0;
             float rho = rho0;
-
-            if (isInsideTriangle(x, y, width, height))
-            {
-                // Zero velocity for solid nodes (wing)
-                ux = 0.0f;
-                uy = 0.0f;
-            }
 
             // Calculate equilibrium distribution
             for (int i = 0; i < num_velocities; i++)
