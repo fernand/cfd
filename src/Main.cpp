@@ -42,10 +42,10 @@ uniform int height;
 uniform float U0;
 uniform float tau;
 
-const vec2 velocities[9] = vec2[9](
-    vec2(-1, 1), vec2(0, 1), vec2(1, 1),
-    vec2(-1, 0), vec2(0, 0), vec2(1, 0),
-    vec2(-1, -1), vec2(0, -1), vec2(1, -1)
+const ivec2 velocities[9] = ivec2[9](
+    ivec2(-1, 1), ivec2(0, 1), ivec2(1, 1),
+    ivec2(-1, 0), ivec2(0, 0), ivec2(1, 0),
+    ivec2(-1, -1), ivec2(0, -1), ivec2(1, -1)
 );
 
 const float weights[9] = float[9](
@@ -70,60 +70,65 @@ void main() {
     if (isSolid(gid.x, gid.y)) {
         // Bounce-back boundary condition for solid
         for (int i = 0; i < 9; i++) {
-            f_out[index * 9 + i] = f_in[index * 9 + opp[i]];
+            ivec2 neighborPos = gid + velocities[i];
+            if (neighborPos.x >= 0 && neighborPos.x < width && neighborPos.y >= 0 && neighborPos.y < height) {
+                int neighborIndex = neighborPos.y * width + neighborPos.x;
+                f_out[index * 9 + opp[i]] = f_in[neighborIndex * 9 + i];
+            } else {
+                // Handle boundary edges if necessary
+                f_out[index * 9 + opp[i]] = f_in[index * 9 + i];
+            }
         }
         return;
     }
 
-    // Regular LBM steps for fluid regions
+    // Streaming step (pull from neighbors)
     float f[9];
     for (int i = 0; i < 9; i++) {
-        f[i] = f_in[index * 9 + i];
+        ivec2 neighborPos = gid - velocities[i];
+        if (neighborPos.x >= 0 && neighborPos.x < width && neighborPos.y >= 0 && neighborPos.y < height) {
+            int neighborIndex = neighborPos.y * width + neighborPos.x;
+            f[i] = f_in[neighborIndex * 9 + i];
+        } else {
+            // Apply boundary conditions
+            f[i] = f_in[index * 9 + i]; // Simple example, adjust as needed
+        }
     }
 
+    // Compute density and velocity
     float density = 0.0;
     vec2 velocity = vec2(0.0);
     for (int i = 0; i < 9; i++) {
         density += f[i];
-        velocity += f[i] * velocities[i];
+        velocity += f[i] * vec2(velocities[i]);
     }
     velocity /= density;
 
-    if (gid.x == 0 || gid.x == width - 1 || gid.y == 0 || gid.y == height -1) {
+    // Apply boundary conditions at the edges
+    if (gid.x == 0 || gid.x == width - 1 || gid.y == 0 || gid.y == height - 1) {
         velocity = vec2(U0, 0.0); // Positive x-direction
         density = 1.0;
 
         // Compute equilibrium distribution functions
         for (int i = 0; i < 9; i++) {
-            float velDotC = dot(velocities[i], velocity);
+            float velDotC = dot(vec2(velocities[i]), velocity);
             float velSq = dot(velocity, velocity);
             f_out[index * 9 + i] = weights[i] * density * (1.0 + 3.0 * velDotC +
-                                4.5 * velDotC * velDotC - 1.5 * velSq);
+                                    4.5 * velDotC * velDotC - 1.5 * velSq);
         }
         return;
     }
 
-    // Compute equilibrium distribution functions
+    // Collision step
     float feq[9];
     for (int i = 0; i < 9; i++) {
-        float velDotC = dot(velocities[i], velocity);
+        float velDotC = dot(vec2(velocities[i]), velocity);
         float velSq = dot(velocity, velocity);
         feq[i] = weights[i] * density * (1.0 + 3.0 * velDotC + 4.5 * velDotC * velDotC - 1.5 * velSq);
     }
 
-    // Collision step
     for (int i = 0; i < 9; i++) {
-        f[i] += -(f[i] - feq[i]) / tau;
-    }
-
-    // Streaming step
-    ivec2 nextPos;
-    for (int i = 0; i < 9; i++) {
-        nextPos = ivec2(gl_GlobalInvocationID.xy) + ivec2(velocities[i]);
-        if (nextPos.x >= 0 && nextPos.x < width && nextPos.y >= 0 && nextPos.y < height) {
-            int nextIndex = nextPos.y * width + nextPos.x;
-            f_out[nextIndex * 9 + i] = f[i];
-        }
+        f_out[index * 9 + i] = f[i] - (f[i] - feq[i]) / tau;
     }
 }
 )glsl";
@@ -345,21 +350,17 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine,
     glAttachShader(compute_program, compute_shader);
     LinkProgram(compute_program);
 
-    float U0 = 0.1f;              // Initial flow velocity
-    // const float L = width / 10; // Characteristic length
-    // const float Re = 100.0f;       // Reynolds number
-    // float nu = U0 * L / Re;        // kinematic viscosity
-    // float tau = 3.0f * nu + 0.5f;  // relaxation time
-    float tau = 1.0f;
+    float U0 = 0.1f; // Initial flow velocity
+    float tau = 0.6f;
 
     // Initialize distribution functions with a uniform flow from right to left
     float rho0 = 1.0f;
     float ux0 = U0;
     float uy0 = 0.0f;
 
-    float centerX = width / 2.0f;
+    float centerX = width / 4.0f;
     float centerY = height / 2.0f;
-    float wingLength = width / 2.0f;
+    float wingLength = width / 4.0f;
     float wingHeight = wingLength / 4.0f;
 
     HMM_Vec2 v1 = {centerX - wingLength / 2, centerY};                  // tip
