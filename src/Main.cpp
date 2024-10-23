@@ -131,7 +131,7 @@ uniform int width;
 uniform int height;
 uniform float U0; // Initial maximum speed for normalization
 
-layout(std430, binding = 0) buffer DF_In {
+layout(std430, binding = 1) buffer DF_In {
     float f_in[];
 };
 
@@ -375,6 +375,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine,
     HMM_Vec2 v3 = {centerX + wingLength / 2, centerY + wingHeight / 2}; // top right
 
     std::vector<float> f_in(width * height * num_velocities);
+    std::vector<uint32_t> solid_cells((width * height + 31) / 32, 0);
     for (int y = 0; y < height; y++)
     {
         for (int x = 0; x < width; x++)
@@ -386,6 +387,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine,
             {
                 ux = 0;
                 uy = 0;
+
+                int bit_index = y * width + x;
+                solid_cells[bit_index / 32] |= (1u << (bit_index % 32));
             }
             else {
                 ux = ux0;
@@ -399,20 +403,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine,
                 float usqr = ux * ux + uy * uy;
                 f_in[idx + i] =
                     weights[i] * rho0 * (1.0f + 3.0f * cu + 4.5f * cu * cu - 1.5f * usqr);
-            }
-        }
-    }
-
-    // Initialize the bit buffer for the delta wing
-    std::vector<uint32_t> solid_cells((width * height + 31) / 32, 0);
-    for (int y = 0; y < height; y++)
-    {
-        for (int x = 0; x < width; x++)
-        {
-            if (isInTriangle(x, y, v1, v2, v3))
-            {
-                int bit_index = y * width + x;
-                solid_cells[bit_index / 32] |= (1u << (bit_index % 32));
             }
         }
     }
@@ -483,7 +473,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine,
         glUniform1i(glGetUniformLocation(render_program, "width"), width);
         glUniform1i(glGetUniformLocation(render_program, "height"), height);
         glUniform1f(glGetUniformLocation(render_program, "U0"), U0);
-        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssbo[1]); // The latest data is in ssbo[1]
         glBindVertexArray(quadVAO);
         glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
 
