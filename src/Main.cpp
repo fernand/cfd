@@ -145,6 +145,7 @@ const vec2 velocities[9] = vec2[9](
     vec2(-1, 0), vec2(0, 0), vec2(1, 0),
     vec2(-1, -1), vec2(0, -1), vec2(1, -1)
 );
+
 // Function to convert normalized values to RGB
 vec3 color_from_floats(float red, float green, float blue) {
     return vec3(clamp(red, 0.0, 1.0), clamp(green, 0.0, 1.0), clamp(blue, 0.0, 1.0));
