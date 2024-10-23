@@ -70,14 +70,7 @@ void main() {
     if (isSolid(gid.x, gid.y)) {
         // Bounce-back boundary condition for solid
         for (int i = 0; i < 9; i++) {
-            ivec2 neighborPos = gid + velocities[i];
-            if (neighborPos.x >= 0 && neighborPos.x < width && neighborPos.y >= 0 && neighborPos.y < height) {
-                int neighborIndex = neighborPos.y * width + neighborPos.x;
-                f_out[index * 9 + opp[i]] = f_in[neighborIndex * 9 + i];
-            } else {
-                // Handle boundary edges if necessary
-                f_out[index * 9 + opp[i]] = f_in[index * 9 + i];
-            }
+            f_out[index * 9 + opp[i]] = f_in[index * 9 + i];
         }
         return;
     }
