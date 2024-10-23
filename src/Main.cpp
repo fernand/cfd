@@ -84,7 +84,7 @@ void main() {
             f[i] = f_in[neighborIndex * 9 + i];
         } else {
             // Apply boundary conditions depending on which boundary it is
-            if (neighborPos.x < 0) {
+            if (neighborPos.x < 0 || neighborPos.x >= width || neighborPos.y < 0 || neighborPos.y >= height) {
                 // Left boundary (inlet)
                 float density = 1.0;
                 vec2 velocity = vec2(U0, 0.0);
@@ -92,12 +92,6 @@ void main() {
                 float velSq = dot(velocity, velocity);
                 f[i] = weights[i] * density * (1.0 + 3.0 * velDotC +
                                 4.5 * velDotC * velDotC - 1.5 * velSq);
-            } else if (neighborPos.x >= width) {
-                // Right boundary (outlet)
-                f[i] = f_in[index * 9 + i]; // Zero-gradient (extrapolate)
-            } else if (neighborPos.y < 0 || neighborPos.y >= height) {
-                // Top or bottom boundaries (no-slip walls)
-                f[i] = f_in[index * 9 + opp[i]]; // Bounce-back
             }
         }
     }
