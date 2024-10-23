@@ -369,7 +369,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine,
     LinkProgram(compute_program);
 
     float U0 = 0.1f;              // Initial flow velocity
-    const float L = 10; // Characteristic length
+    const float L = width / 10; // Characteristic length
     const float Re = 100.0f;       // Reynolds number
     float nu = U0 * L / Re;        // kinematic viscosity
     float tau = 3.0f * nu + 0.5f;  // relaxation time
