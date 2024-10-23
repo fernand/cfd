@@ -145,9 +145,55 @@ const vec2 velocities[9] = vec2[9](
     vec2(-1, 0), vec2(0, 0), vec2(1, 0),
     vec2(-1, -1), vec2(0, -1), vec2(1, -1)
 );
+// Function to convert normalized values to RGB
+vec3 color_from_floats(float red, float green, float blue) {
+    return vec3(clamp(red, 0.0, 1.0), clamp(green, 0.0, 1.0), clamp(blue, 0.0, 1.0));
+}
 
-void main()
-{
+// Colorscale rainbow
+vec3 colorscale_rainbow(float x) {
+    x = clamp(6.0 * (1.0 - x), 0.0, 6.0);
+    vec3 color = vec3(0.0, 0.0, 0.0);
+
+    if (x < 1.2) {
+        color = vec3(1.0, x * 0.83333333, 0.0);
+    } else if (x < 2.0) {
+        color = vec3(2.5 - x * 1.25, 1.0, 0.0);
+    } else if (x < 3.0) {
+        color = vec3(0.0, 1.0, x - 2.0);
+    } else if (x < 4.0) {
+        color = vec3(0.0, 4.0 - x, 1.0);
+    } else if (x < 5.0) {
+        color = vec3(x * 0.4 - 1.6, 0.0, 3.0 - x * 0.5);
+    } else {
+        color = vec3(2.4 - x * 0.4, 0.0, 3.0 - x * 0.5);
+    }
+
+    return color;
+}
+
+// Colorscale iron
+vec3 colorscale_iron(float x) {
+    x = clamp(4.0 * (1.0 - x), 0.0, 4.0);
+    vec3 color = vec3(1.0, 0.0, 0.0);
+
+    if (x < 0.66666667) {
+        color.g = 1.0;
+        color.b = 1.0 - x * 1.5;
+    } else if (x < 2.0) {
+        color.g = 1.5 - x * 0.75;
+    } else if (x < 3.0) {
+        color.r = 2.0 - x * 0.5;
+        color.b = x - 2.0;
+    } else {
+        color.r = 2.0 - x * 0.5;
+        color.b = 4.0 - x;
+    }
+
+    return color;
+}
+
+void main() {
     // Compute pixel coordinates
     int x = int(TexCoords.x * float(width));
     int y = int(TexCoords.y * float(height));
@@ -188,55 +234,16 @@ void main()
         return;
     }
 
-    // Calculate vorticity (curl of velocity) using central differences
-    float dvx_dy = 0.0;
-    float dvy_dx = 0.0;
-    if (x > 0 && x < width-1 && y > 0 && y < height-1) {
-        int idx_up = ((y+1) * width + x) * 9;
-        int idx_down = ((y-1) * width + x) * 9;
-        int idx_right = (y * width + (x+1)) * 9;
-        int idx_left = (y * width + (x-1)) * 9;
+    float normalized_v = clamp(speed / U0, 0.0, 1.0);
 
-        float density_up = 0.0, density_down = 0.0, density_right = 0.0, density_left = 0.0;
-        vec2 vel_up = vec2(0.0), vel_down = vec2(0.0), vel_right = vec2(0.0), vel_left = vec2(0.0);
+    // Choose one of the color scales (e.g., rainbow)
+    vec3 color = colorscale_rainbow(normalized_v);
 
-        for (int i = 0; i < 9; i++) {
-            density_up += f_in[idx_up + i];
-            density_down += f_in[idx_down + i];
-            density_right += f_in[idx_right + i];
-            density_left += f_in[idx_left + i];
+    // Alternatively, use the iron colorscale
+    // vec3 color = colorscale_iron(normalized_v);
 
-            vel_up += f_in[idx_up + i] * velocities[i];
-            vel_down += f_in[idx_down + i] * velocities[i];
-            vel_right += f_in[idx_right + i] * velocities[i];
-            vel_left += f_in[idx_left + i] * velocities[i];
-        }
-                vel_up /= density_up;
-        vel_down /= density_down;
-        vel_right /= density_right;
-        vel_left /= density_left;
-
-        dvx_dy = (vel_up.x - vel_down.x) / 2.0;
-        dvy_dx = (vel_right.y - vel_left.y) / 2.0;
-    }
-
-    float vorticity = dvx_dy - dvy_dx;
-    float normalizedSpeed = clamp(speed / U0, 0.0, 1.0);
-
-    // Modify color mapping to show flow better
-    vec3 color;
-    if (solid) {
-        color = vec3(0.5, 0.5, 0.5);  // Gray for solid
-    } else {
-        // Blue to red color mapping
-        color = vec3(normalizedSpeed, 0.0, 1.0 - normalizedSpeed);
-
-        // Add vorticity visualization
-        float vort_intensity = abs(vorticity) * 0.5;
-        color = mix(color, vec3(0.0, 1.0, 0.0) * sign(vorticity), clamp(vort_intensity, 0.0, 0.3));
-    }
-
-    FragColor = vec4(color, 1.0);
+    // Output the final color
+    FragColor = vec4(color_from_floats(color.r, color.g, color.b), 1.0);
 }
 )glsl";
 
@@ -336,8 +343,12 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine,
     glAttachShader(compute_program, compute_shader);
     LinkProgram(compute_program);
 
-    float U0 = 0.1f; // Initial flow velocity
-    float tau = 0.6f;
+    float U0 = 0.1f;               // Initial velocity slightly
+    // const float L = width / 10.0f; // Characteristic length
+    // const float Re = 100.0f;       // Reynolds number
+    // float nu = U0 * L / Re;        // kinematic viscosity
+    // float tau = 3.0f * nu + 0.5f;  // relaxation time
+    const float tau = 1.5f;
 
     // Initialize distribution functions with a uniform flow from right to left
     float rho0 = 1.0f;
@@ -458,11 +469,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine,
 
     while (!glfwWindowShouldClose(window))
     {
-        // Run the compute shader
-        glUseProgram(compute_program);
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssbo[0]);      // f_in
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, ssbo[1]);      // f_out
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, solid_buffer); // solid cells
+
+        glUseProgram(compute_program);
         glUniform1i(glGetUniformLocation(compute_program, "width"), width);
         glUniform1i(glGetUniformLocation(compute_program, "height"), height);
         glUniform1f(glGetUniformLocation(compute_program, "U0"), U0);
@@ -470,7 +481,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine,
         glDispatchCompute(width / 16, height / 16, 1);
         glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT | GL_BUFFER_UPDATE_BARRIER_BIT);
 
-        // Render the visualization
         glClear(GL_COLOR_BUFFER_BIT);
         glUseProgram(render_program);
         glUniform1i(glGetUniformLocation(render_program, "width"), width);
@@ -480,14 +490,15 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine,
         glBindVertexArray(quadVAO);
         glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
 
-        // Swap the SSBOs for the next iteration
         std::swap(ssbo[0], ssbo[1]);
 
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
+        ImGui::Begin("Debug");
         ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
+        ImGui::End();
 
         ImGui::Render();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
