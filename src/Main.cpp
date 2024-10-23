@@ -275,6 +275,16 @@ float quadVertices[] = {
 
 unsigned int quadIndices[] = {0, 1, 2, 0, 2, 3};
 
+inline bool isInTriangle(float x, float y, HMM_Vec2 v1, HMM_Vec2 v2, HMM_Vec2 v3)
+{
+    // Barycentric coordinate calculation
+    float d = (v2.Y - v3.Y) * (v1.X - v3.X) + (v3.X - v2.X) * (v1.Y - v3.Y);
+    float a = ((v2.Y - v3.Y) * (x - v3.X) + (v3.X - v2.X) * (y - v3.Y)) / d;
+    float b = ((v3.Y - v1.Y) * (x - v3.X) + (v1.X - v3.X) * (y - v3.Y)) / d;
+    float c = 1 - a - b;
+    return a >= 0 && a <= 1 && b >= 0 && b <= 1 && c >= 0 && c <= 1;
+}
+
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine, INT nCmdShow)
 {
     if (!glfwInit())
@@ -371,15 +381,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine,
         {
             int idx = (y * width + x) * num_velocities;
 
-            // Barycentric coordinate calculation
-            float d = (v2.Y - v3.Y) * (v1.X - v3.X) + (v3.X - v2.X) * (v1.Y - v3.Y);
-            float a = ((v2.Y - v3.Y) * (x - v3.X) + (v3.X - v2.X) * (y - v3.Y)) / d;
-            float b = ((v3.Y - v1.Y) * (x - v3.X) + (v1.X - v3.X) * (y - v3.Y)) / d;
-            float c = 1 - a - b;
-
             float ux, uy;
             float rho = rho0;
-            if (a >= 0 && a <= 1 && b >= 0 && b <= 1 && c >= 0 && c <= 1)
+            if (isInTriangle(x, y, v1, v2, v3))
             {
                 ux = 0;
                 uy = 0;
@@ -406,13 +410,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine,
     {
         for (int x = 0; x < width; x++)
         {
-            // Barycentric coordinate calculation
-            float d = (v2.Y - v3.Y) * (v1.X - v3.X) + (v3.X - v2.X) * (v1.Y - v3.Y);
-            float a = ((v2.Y - v3.Y) * (x - v3.X) + (v3.X - v2.X) * (y - v3.Y)) / d;
-            float b = ((v3.Y - v1.Y) * (x - v3.X) + (v1.X - v3.X) * (y - v3.Y)) / d;
-            float c = 1 - a - b;
-
-            if (a >= 0 && a <= 1 && b >= 0 && b <= 1 && c >= 0 && c <= 1)
+            if (isInTriangle(x, y, v1, v2, v3))
             {
                 int bit_index = y * width + x;
                 solid_cells[bit_index / 32] |= (1u << (bit_index % 32));
@@ -496,7 +494,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine,
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
-        ImGui::Begin("Debug");
+        ImGui::Begin("Dbg");
         ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
         ImGui::Text("Tau: %.2f", tau);
         ImGui::End();
