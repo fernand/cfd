@@ -480,7 +480,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine,
         ImGui::NewFrame();
 
         ImGui::Begin("Dbg");
-        ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
+        ImGui::Text("FPS: %.0f", ImGui::GetIO().Framerate);
         ImGui::Text("Tau: %.2f", tau);
         ImGui::End();
 
