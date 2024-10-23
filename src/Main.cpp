@@ -97,21 +97,6 @@ void main() {
     }
     velocity /= density;
 
-    // Apply boundary conditions at the edges
-    if (gid.x == 0 || gid.x == width - 1 || gid.y == 0 || gid.y == height - 1) {
-        velocity = vec2(U0, 0.0); // Positive x-direction
-        density = 1.0;
-
-        // Compute equilibrium distribution functions
-        for (int i = 0; i < 9; i++) {
-            float velDotC = dot(vec2(velocities[i]), velocity);
-            float velSq = dot(velocity, velocity);
-            f_out[index * 9 + i] = weights[i] * density * (1.0 + 3.0 * velDotC +
-                                    4.5 * velDotC * velDotC - 1.5 * velSq);
-        }
-        return;
-    }
-
     // Collision step
     float feq[9];
     for (int i = 0; i < 9; i++) {
@@ -373,15 +358,17 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine,
             float b = ((v3.Y - v1.Y) * (x - v3.X) + (v1.X - v3.X) * (y - v3.Y)) / d;
             float c = 1 - a - b;
 
+            float ux, uy;
+            float rho = rho0;
             if (a >= 0 && a <= 1 && b >= 0 && b <= 1 && c >= 0 && c <= 1)
             {
-                for (int i = 0; i < num_velocities; i++)
-                    f_in[idx + i] = 0;
-                continue;
+                ux = 0;
+                uy = 0;
             }
-            float ux = ux0;
-            float uy = uy0;
-            float rho = rho0;
+            else {
+                ux = ux0;
+                uy = uy0;
+            }
 
             // Calculate equilibrium distribution
             for (int i = 0; i < num_velocities; i++)
