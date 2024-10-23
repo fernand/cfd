@@ -90,18 +90,15 @@ void main() {
     velocity /= density;
 
     if (gid.x == 0 || gid.x == width - 1 || gid.y == 0 || gid.y == height -1) {
-        // Inflow boundary condition at the left boundary
         velocity = vec2(U0, 0.0); // Positive x-direction
         density = 1.0;
 
         // Compute equilibrium distribution functions
-        float feq_boundary[9];
         for (int i = 0; i < 9; i++) {
             float velDotC = dot(velocities[i], velocity);
             float velSq = dot(velocity, velocity);
-            feq_boundary[i] = weights[i] * density * (1.0 + 3.0 * velDotC +
-                            4.5 * velDotC * velDotC - 1.5 * velSq);
-            f_out[index * 9 + i] = feq_boundary[i];
+            f_out[index * 9 + i] = weights[i] * density * (1.0 + 3.0 * velDotC +
+                                4.5 * velDotC * velDotC - 1.5 * velSq);
         }
         return;
     }
@@ -277,28 +274,6 @@ float quadVertices[] = {
 
 unsigned int quadIndices[] = {0, 1, 2, 0, 2, 3};
 
-bool isInsideTriangle(float x, float y, float width, float height)
-{
-    // Triangle vertices (wing pointing left)
-    float centerX = width / 2.0f;
-    float centerY = height / 2.0f;
-    float wingLength = width / 2.0f;
-    float wingHeight = wingLength / 4.0f; // aspect ratio of 4:1
-
-    // Triangle vertices
-    HMM_Vec2 v1 = {centerX - wingLength / 2, centerY};                  // tip
-    HMM_Vec2 v2 = {centerX + wingLength / 2, centerY - wingHeight / 2}; // bottom right
-    HMM_Vec2 v3 = {centerX + wingLength / 2, centerY + wingHeight / 2}; // top right
-
-    // Barycentric coordinate calculation
-    float d = (v2.Y - v3.Y) * (v1.X - v3.X) + (v3.X - v2.X) * (v1.Y - v3.Y);
-    float a = ((v2.Y - v3.Y) * (x - v3.X) + (v3.X - v2.X) * (y - v3.Y)) / d;
-    float b = ((v3.Y - v1.Y) * (x - v3.X) + (v1.X - v3.X) * (y - v3.Y)) / d;
-    float c = 1 - a - b;
-
-    return a >= 0 && a <= 1 && b >= 0 && b <= 1 && c >= 0 && c <= 1;
-}
-
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine, INT nCmdShow)
 {
     if (!glfwInit())
@@ -369,15 +344,25 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine,
     LinkProgram(compute_program);
 
     float U0 = 0.1f;              // Initial flow velocity
-    const float L = width / 10; // Characteristic length
-    const float Re = 100.0f;       // Reynolds number
-    float nu = U0 * L / Re;        // kinematic viscosity
-    float tau = 3.0f * nu + 0.5f;  // relaxation time
+    // const float L = width / 10; // Characteristic length
+    // const float Re = 100.0f;       // Reynolds number
+    // float nu = U0 * L / Re;        // kinematic viscosity
+    // float tau = 3.0f * nu + 0.5f;  // relaxation time
+    float tau = 0.6f;
 
     // Initialize distribution functions with a uniform flow from right to left
     float rho0 = 1.0f;
     float ux0 = U0;
     float uy0 = 0.0f;
+
+    float centerX = width / 2.0f;
+    float centerY = height / 2.0f;
+    float wingLength = width / 2.0f;
+    float wingHeight = wingLength / 4.0f;
+
+    HMM_Vec2 v1 = {centerX - wingLength / 2, centerY};                  // tip
+    HMM_Vec2 v2 = {centerX + wingLength / 2, centerY - wingHeight / 2}; // bottom right
+    HMM_Vec2 v3 = {centerX + wingLength / 2, centerY + wingHeight / 2}; // top right
 
     std::vector<float> f_in(width * height * num_velocities);
     for (int y = 0; y < height; y++)
@@ -400,18 +385,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine,
         }
     }
 
-    std::vector<uint32_t> solid_cells((width * height + 31) / 32, 0);
-
     // Initialize the bit buffer for the delta wing
-    float centerX = width / 2.0f;
-    float centerY = height / 2.0f;
-    float wingLength = width / 2.0f;
-    float wingHeight = wingLength / 4.0f;
-
-    HMM_Vec2 v1 = {centerX - wingLength / 2, centerY};                  // tip
-    HMM_Vec2 v2 = {centerX + wingLength / 2, centerY - wingHeight / 2}; // bottom right
-    HMM_Vec2 v3 = {centerX + wingLength / 2, centerY + wingHeight / 2}; // top right
-
+    std::vector<uint32_t> solid_cells((width * height + 31) / 32, 0);
     for (int y = 0; y < height; y++)
     {
         for (int x = 0; x < width; x++)
