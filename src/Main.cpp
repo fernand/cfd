@@ -67,7 +67,6 @@ void main() {
     ivec2 gid = ivec2(gl_GlobalInvocationID.xy);
     int index = gid.y * width + gid.x;
 
-    // Check if current point is solid using bit buffer
     if (isSolid(gid.x, gid.y)) {
         // Bounce-back boundary condition for solid
         for (int i = 0; i < 9; i++) {
@@ -90,16 +89,26 @@ void main() {
     }
     velocity /= density;
 
-    // Boundary handling goes here
-    if (gid.x == width - 1) { // Inlet
+    // Boundary handling with equilibrium conditions
+    if (gid.x == width - 1 || gid.x == 0 || gid.y == 0 || gid.y == height - 1) {
         velocity = vec2(-U0, 0.0);
         density = 1.0;
-    } else if (gid.x == 0) { // Outlet
-        velocity = vec2(-U0, 0.0);
-        density = 1.0;
-    } else if (gid.y == 0 || gid.y == height-1) { // Top and bottom walls
-        velocity = vec2(-U0, 0.0);
-        density = 1.0;
+
+        // Compute equilibrium distribution functions
+        float feq_boundary[9];
+        for (int i = 0; i < 9; i++) {
+            float velDotC = dot(velocities[i], velocity);
+            float velSq = dot(velocity, velocity);
+            feq_boundary[i] = weights[i] * density * (1.0 + 3.0 * velDotC +
+                            4.5 * velDotC * velDotC - 1.5 * velSq);
+            f[i] = feq_boundary[i];
+        }
+
+        // Write equilibrium distributions directly to f_out
+        for (int i = 0; i < 9; i++) {
+            f_out[index * 9 + i] = f[i];
+        }
+        return;
     }
 
     // Compute equilibrium distribution functions
@@ -118,13 +127,18 @@ void main() {
     // Streaming step
     for (int i = 0; i < 9; i++) {
         ivec2 nextPos = gid + ivec2(velocities[i]);
-
-        // Handle boundaries
-        nextPos.x = clamp(nextPos.x, 0, width - 1);
-        nextPos.y = clamp(nextPos.y, 0, height - 1);
-
-        int nextIndex = nextPos.y * width + nextPos.x;
-        f_out[nextIndex * 9 + i] = f[i];
+        // Check if nextPos is within the domain
+        if (nextPos.x >= 0 && nextPos.x < width && nextPos.y >= 0 && nextPos.y < height) {
+            int nextIndex = nextPos.y * width + nextPos.x;
+            f_out[nextIndex * 9 + i] = f[i];
+        } else {
+            // For boundaries, set to equilibrium distribution
+            float velDotC = dot(velocities[i], velocity);
+            float velSq = dot(velocity, velocity);
+            float feq_i = weights[i] * density * (1.0 + 3.0 * velDotC +
+                        4.5 * velDotC * velDotC - 1.5 * velSq);
+            f_out[index * 9 + i] = feq_i;
+        }
     }
 }
 )glsl";
@@ -231,7 +245,7 @@ void main()
     }
 
     float vorticity = dvx_dy - dvy_dx;
-    float normalizedSpeed = clamp(speed / U0, 0.0, 1.0);
+    float normalizedSpeed = clamp(speed / 2 * U0, 0.0, 1.0);
 
     // Modify color mapping to show flow better
     vec3 color;
