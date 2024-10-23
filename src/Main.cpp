@@ -509,8 +509,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine,
         ImGui::NewFrame();
 
         ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
-        ImGui::SliderFloat("U0", &U0, 0.01f, 0.2f);
-        ImGui::SliderFloat("tau", &tau, 0.6f, 2.0f);
 
         ImGui::Render();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
