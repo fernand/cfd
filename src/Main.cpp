@@ -89,9 +89,9 @@ void main() {
     }
     velocity /= density;
 
-    // Boundary handling with equilibrium conditions
-    if (gid.x == width - 1 || gid.x == 0 || gid.y == 0 || gid.y == height - 1) {
-        velocity = vec2(-U0, 0.0);
+    if (gid.x == 0 || gid.x == width - 1 || gid.y == 0 || gid.y == height -1) {
+        // Inflow boundary condition at the left boundary
+        velocity = vec2(U0, 0.0); // Positive x-direction
         density = 1.0;
 
         // Compute equilibrium distribution functions
@@ -101,12 +101,7 @@ void main() {
             float velSq = dot(velocity, velocity);
             feq_boundary[i] = weights[i] * density * (1.0 + 3.0 * velDotC +
                             4.5 * velDotC * velDotC - 1.5 * velSq);
-            f[i] = feq_boundary[i];
-        }
-
-        // Write equilibrium distributions directly to f_out
-        for (int i = 0; i < 9; i++) {
-            f_out[index * 9 + i] = f[i];
+            f_out[index * 9 + i] = feq_boundary[i];
         }
         return;
     }
@@ -125,20 +120,11 @@ void main() {
     }
 
     // Streaming step
+    ivec2 nextPos;
     for (int i = 0; i < 9; i++) {
-        ivec2 nextPos = gid + ivec2(velocities[i]);
-        // Check if nextPos is within the domain
-        if (nextPos.x >= 0 && nextPos.x < width && nextPos.y >= 0 && nextPos.y < height) {
-            int nextIndex = nextPos.y * width + nextPos.x;
-            f_out[nextIndex * 9 + i] = f[i];
-        } else {
-            // For boundaries, set to equilibrium distribution
-            float velDotC = dot(velocities[i], velocity);
-            float velSq = dot(velocity, velocity);
-            float feq_i = weights[i] * density * (1.0 + 3.0 * velDotC +
-                        4.5 * velDotC * velDotC - 1.5 * velSq);
-            f_out[index * 9 + i] = feq_i;
-        }
+        nextPos = ivec2(gl_GlobalInvocationID.xy) - ivec2(velocities[i]);
+        int nextIndex = nextPos.y * width + nextPos.x;
+        f_out[nextIndex * 9 + i] = f[i];
     }
 }
 )glsl";
@@ -245,7 +231,7 @@ void main()
     }
 
     float vorticity = dvx_dy - dvy_dx;
-    float normalizedSpeed = clamp(speed / 2 * U0, 0.0, 1.0);
+    float normalizedSpeed = clamp(speed / U0, 0.0, 1.0);
 
     // Modify color mapping to show flow better
     vec3 color;
@@ -382,15 +368,15 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine,
     glAttachShader(compute_program, compute_shader);
     LinkProgram(compute_program);
 
-    float U0 = 0.05f;              // Initial flow velocity
-    const float L = width / 10.0f; // Characteristic length
+    float U0 = 0.1f;              // Initial flow velocity
+    const float L = 10; // Characteristic length
     const float Re = 100.0f;       // Reynolds number
     float nu = U0 * L / Re;        // kinematic viscosity
     float tau = 3.0f * nu + 0.5f;  // relaxation time
 
     // Initialize distribution functions with a uniform flow from right to left
     float rho0 = 1.0f;
-    float ux0 = -U0; // Negative velocity for flow from right to left
+    float ux0 = U0;
     float uy0 = 0.0f;
 
     std::vector<float> f_in(width * height * num_velocities);
