@@ -345,11 +345,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine,
     LinkProgram(compute_program);
 
     float U0 = 0.1f;               // Initial velocity slightly
-    const float L = width / 10.0f; // Characteristic length
+    const float L = 128; // Characteristic length
     const float Re = 100.0f;       // Reynolds number
     float nu = U0 * L / Re;        // kinematic viscosity
     float tau = 3.0f * nu + 0.5f;  // relaxation time
-    // const float tau = 0.6f;
 
     // Initialize distribution functions with a uniform flow from right to left
     float rho0 = 1.0f;
@@ -499,6 +498,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine,
 
         ImGui::Begin("Debug");
         ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
+        ImGui::Text("Tau: %.2f", tau);
         ImGui::End();
 
         ImGui::Render();
