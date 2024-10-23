@@ -33,9 +33,14 @@ layout(std430, binding = 1) buffer DF_Out {
     float f_out[];
 };
 
+layout(std430, binding = 2) buffer SolidCells {
+    uint solid_bits[];
+};
+
 uniform int width;
 uniform int height;
-uniform float tau; // Relaxation time
+uniform float U0;
+uniform float tau;
 
 const vec2 velocities[9] = vec2[9](
     vec2(-1, 1), vec2(0, 1), vec2(1, 1),
@@ -49,10 +54,28 @@ const float weights[9] = float[9](
     1.0f/36, 1.0f/9, 1.0f/36
 );
 
+bool isSolid(int x, int y) {
+    int bit_index = y * width + x;
+    uint word_index = bit_index / 32;
+    uint bit_offset = bit_index % 32;
+    return (solid_bits[word_index] & (1u << bit_offset)) != 0u;
+}
+
 void main() {
     ivec2 gid = ivec2(gl_GlobalInvocationID.xy);
     int index = gid.y * width + gid.x;
 
+    // Check if current point is solid using bit buffer
+    if (isSolid(gid.x, gid.y)) {
+        // Bounce-back boundary condition for solid
+        for (int i = 0; i < 9; i++) {
+            int opp = 8 - i; // Opposite direction
+            f_out[index * 9 + i] = f_in[index * 9 + opp];
+        }
+        return;
+    }
+
+    // Regular LBM steps for fluid regions
     float f[9];
     for (int i = 0; i < 9; i++) {
         f[i] = f_in[index * 9 + i];
@@ -65,6 +88,36 @@ void main() {
         velocity += f[i] * velocities[i];
     }
     velocity /= density;
+
+    // Boundary handling goes here
+    if (gid.x == 0) { // Inlet (left boundary)
+        velocity = vec2(-U0, 0.0);
+        density = 1.0;
+        // Set equilibrium distribution for inlet
+        for (int i = 0; i < 9; i++) {
+            float velDotC = dot(velocities[i], velocity);
+            float velSq = dot(velocity, velocity);
+            f[i] = weights[i] * density * (1.0 + 3.0 * velDotC + 4.5 * velDotC * velDotC - 1.5 * velSq);
+        }
+    }
+    else if (gid.x == width-1) { // Outlet (right boundary)
+        // Zero gradient outlet - copy from previous node
+        ivec2 prev = ivec2(gid.x - 1, gid.y);
+        int prevIdx = prev.y * width + prev.x;
+        for (int i = 0; i < 9; i++) {
+            f[i] = f_in[prevIdx * 9 + i];
+        }
+    }
+    else if (gid.y == 0 || gid.y == height-1) { // Top and bottom boundaries
+        // No-slip boundary condition
+        velocity = vec2(0.0, 0.0);
+        // Set equilibrium distribution for wall
+        for (int i = 0; i < 9; i++) {
+            float velDotC = dot(velocities[i], velocity);
+            float velSq = dot(velocity, velocity);
+            f[i] = weights[i] * density * (1.0 + 3.0 * velDotC + 4.5 * velDotC * velDotC - 1.5 * velSq);
+        }
+    }
 
     // Compute equilibrium distribution functions
     float feq[9];
@@ -79,14 +132,13 @@ void main() {
         f[i] += -(f[i] - feq[i]) / tau;
     }
 
-    // Streaming step with periodic boundaries
-    ivec2 nextPos;
+    // Streaming step
     for (int i = 0; i < 9; i++) {
-        nextPos = ivec2(gl_GlobalInvocationID.xy) - ivec2(velocities[i]);
+        ivec2 nextPos = gid + ivec2(velocities[i]);
 
-        // Apply periodic boundary conditions
-        nextPos.x = (nextPos.x + width) % width;
-        nextPos.y = (nextPos.y + height) % height;
+        // Handle boundaries
+        nextPos.x = clamp(nextPos.x, 0, width - 1);
+        nextPos.y = clamp(nextPos.y, 0, height - 1);
 
         int nextIndex = nextPos.y * width + nextPos.x;
         f_out[nextIndex * 9 + i] = f[i];
@@ -110,6 +162,10 @@ layout(std430, binding = 0) buffer DF_In {
     float f_in[];
 };
 
+layout(std430, binding = 2) buffer SolidCells {
+    uint solid_bits[];
+};
+
 // D2Q9 model velocities
 const vec2 velocities[9] = vec2[9](
     vec2(-1, 1), vec2(0, 1), vec2(1, 1),
@@ -131,6 +187,12 @@ void main()
 
     int index = y * width + x;
 
+    bool solid = (solid_bits[(y * width + x) / 32] & (1u << ((y * width + x) % 32))) != 0u;
+    if (solid) {
+        FragColor = vec4(0.5, 0.5, 0.5, 1.0);  // Gray for solid
+        return;
+    }
+
     float f[9];
     for (int i = 0; i < 9; i++)
     {
@@ -147,13 +209,58 @@ void main()
     velocity /= density;
 
     float speed = length(velocity);
+    float vx = velocity.x;
+    float vy = velocity.y;
 
     // Normalize speed for color mapping
     float normalizedSpeed = speed / U0;
     normalizedSpeed = clamp(normalizedSpeed, 0.0, 1.0);
 
-    // Map normalized speed to color (e.g., from blue to red)
-    vec3 color = vec3(normalizedSpeed, 0.0, 1.0 - normalizedSpeed);
+    // Calculate vorticity (curl of velocity) using central differences
+    float dvx_dy = 0.0;
+    float dvy_dx = 0.0;
+    if (x > 0 && x < width-1 && y > 0 && y < height-1) {
+        int idx_up = ((y+1) * width + x) * 9;
+        int idx_down = ((y-1) * width + x) * 9;
+        int idx_right = (y * width + (x+1)) * 9;
+        int idx_left = (y * width + (x-1)) * 9;
+
+        float density_up = 0.0, density_down = 0.0, density_right = 0.0, density_left = 0.0;
+        vec2 vel_up = vec2(0.0), vel_down = vec2(0.0), vel_right = vec2(0.0), vel_left = vec2(0.0);
+
+        for (int i = 0; i < 9; i++) {
+            density_up += f_in[idx_up + i];
+            density_down += f_in[idx_down + i];
+            density_right += f_in[idx_right + i];
+            density_left += f_in[idx_left + i];
+
+            vel_up += f_in[idx_up + i] * velocities[i];
+            vel_down += f_in[idx_down + i] * velocities[i];
+            vel_right += f_in[idx_right + i] * velocities[i];
+            vel_left += f_in[idx_left + i] * velocities[i];
+        }
+
+        vel_up /= density_up;
+        vel_down /= density_down;
+        vel_right /= density_right;
+        vel_left /= density_left;
+
+        dvx_dy = (vel_up.x - vel_down.x) / 2.0;
+        dvy_dx = (vel_right.y - vel_left.y) / 2.0;
+    }
+
+    float vorticity = dvx_dy - dvy_dx;
+
+    vec3 color;
+    float speedScale = 2.0; // Adjust this value to make the visualization more visible
+    normalizedSpeed = clamp(speed * speedScale / U0, 0.0, 1.0);
+
+    // Simple blue to red color mapping
+    color = vec3(normalizedSpeed, 0.0, 1.0 - normalizedSpeed);
+
+    // Add vorticity visualization
+    float vort_intensity = abs(vorticity) * 0.5;
+    color = mix(color, vec3(0.0, 1.0, 0.0) * sign(vorticity), clamp(vort_intensity, 0.0, 0.3));
 
     FragColor = vec4(color, 1.0);
 }
@@ -185,6 +292,28 @@ float quadVertices[] = {
 // clang-format on
 
 unsigned int quadIndices[] = {0, 1, 2, 0, 2, 3};
+
+bool isInsideTriangle(float x, float y, float width, float height)
+{
+    // Triangle vertices (wing pointing left)
+    float centerX = width / 2.0f;
+    float centerY = height / 2.0f;
+    float wingLength = width / 2.0f;
+    float wingHeight = wingLength / 4.0f; // aspect ratio of 4:1
+
+    // Triangle vertices
+    HMM_Vec2 v1 = {centerX - wingLength / 2, centerY};                  // tip
+    HMM_Vec2 v2 = {centerX + wingLength / 2, centerY - wingHeight / 2}; // bottom right
+    HMM_Vec2 v3 = {centerX + wingLength / 2, centerY + wingHeight / 2}; // top right
+
+    // Barycentric coordinate calculation
+    float d = (v2.Y - v3.Y) * (v1.X - v3.X) + (v3.X - v2.X) * (v1.Y - v3.Y);
+    float a = ((v2.Y - v3.Y) * (x - v3.X) + (v3.X - v2.X) * (y - v3.Y)) / d;
+    float b = ((v3.Y - v1.Y) * (x - v3.X) + (v1.X - v3.X) * (y - v3.Y)) / d;
+    float c = 1 - a - b;
+
+    return a >= 0 && a <= 1 && b >= 0 && b <= 1 && c >= 0 && c <= 1;
+}
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine, INT nCmdShow)
 {
@@ -235,12 +364,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine,
     const float weights[9] = {1.0f / 36.0f, 1.0f / 9.0f,  1.0f / 36.0f, 1.0f / 9.0f, 4.0f / 9.0f,
                               1.0f / 9.0f,  1.0f / 36.0f, 1.0f / 9.0f,  1.0f / 36.0f};
 
-
-    float U0 = 1; // Starting velocity of the flow.
-    const float L = 10; // Domain length in meters, the span of the delta wing
-    const float Re = 100; // Reynolds number
-
-
     GLuint ssbo[2];
     glGenBuffers(2, ssbo);
 
@@ -261,7 +384,81 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine,
     glAttachShader(compute_program, compute_shader);
     LinkProgram(compute_program);
 
+    float U0 = 0.1f;               // Increase initial velocity slightly
+    const float L = width / 10.0f; // Characteristic length
+    const float Re = 100.0f;       // Reynolds number
+    float nu = U0 * L / Re;        // kinematic viscosity
+    float tau = 3.0f * nu + 0.5f;  // relaxation time
+
+    // Initialize distribution functions with a uniform flow from right to left
+    float rho0 = 1.0f;
+    float ux0 = -U0; // Negative velocity for flow from right to left
+    float uy0 = 0.0f;
+
     std::vector<float> f_in(width * height * num_velocities);
+    for (int y = 0; y < height; y++)
+    {
+        for (int x = 0; x < width; x++)
+        {
+            int idx = (y * width + x) * num_velocities;
+            float ux = -U0; // Flow from right to left
+            float uy = 0.0f;
+            float rho = 1.0f;
+
+            if (isInsideTriangle(x, y, width, height))
+            {
+                // Zero velocity for solid nodes
+                ux = 0.0f;
+                uy = 0.0f;
+            }
+
+            // Calculate equilibrium distribution
+            for (int i = 0; i < num_velocities; i++)
+            {
+                float cu = velocities[i].X * ux + velocities[i].Y * uy;
+                float usqr = ux * ux + uy * uy;
+                f_in[idx + i] =
+                    weights[i] * rho * (1.0f + 3.0f * cu + 4.5f * cu * cu - 1.5f * usqr);
+            }
+        }
+    }
+
+    std::vector<uint32_t> solid_cells((width * height + 31) / 32, 0);
+
+    // Initialize the bit buffer for the delta wing
+    float centerX = width / 2.0f;
+    float centerY = height / 2.0f;
+    float wingLength = width / 2.0f;
+    float wingHeight = wingLength / 4.0f;
+
+    HMM_Vec2 v1 = {centerX - wingLength / 2, centerY};                  // tip
+    HMM_Vec2 v2 = {centerX + wingLength / 2, centerY - wingHeight / 2}; // bottom right
+    HMM_Vec2 v3 = {centerX + wingLength / 2, centerY + wingHeight / 2}; // top right
+
+    for (int y = 0; y < height; y++)
+    {
+        for (int x = 0; x < width; x++)
+        {
+            // Barycentric coordinate calculation
+            float d = (v2.Y - v3.Y) * (v1.X - v3.X) + (v3.X - v2.X) * (v1.Y - v3.Y);
+            float a = ((v2.Y - v3.Y) * (x - v3.X) + (v3.X - v2.X) * (y - v3.Y)) / d;
+            float b = ((v3.Y - v1.Y) * (x - v3.X) + (v1.X - v3.X) * (y - v3.Y)) / d;
+            float c = 1 - a - b;
+
+            if (a >= 0 && a <= 1 && b >= 0 && b <= 1 && c >= 0 && c <= 1)
+            {
+                int bit_index = y * width + x;
+                solid_cells[bit_index / 32] |= (1u << (bit_index % 32));
+            }
+        }
+    }
+
+    // Create and initialize the solid cells buffer
+    GLuint solid_buffer;
+    glGenBuffers(1, &solid_buffer);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, solid_buffer);
+    glBufferData(GL_SHADER_STORAGE_BUFFER, solid_cells.size() * sizeof(uint32_t),
+                 solid_cells.data(), GL_STATIC_DRAW);
 
     // Upload the initialized distribution functions to the GPU
     glNamedBufferSubData(ssbo[0], 0, bufferSize, f_in.data());
@@ -307,11 +504,13 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine,
     {
         // Run the compute shader
         glUseProgram(compute_program);
-        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssbo[0]); // f_in
-        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, ssbo[1]); // f_out
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssbo[0]);      // f_in
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, ssbo[1]);      // f_out
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, solid_buffer); // solid cells
         glUniform1i(glGetUniformLocation(compute_program, "width"), width);
         glUniform1i(glGetUniformLocation(compute_program, "height"), height);
-        glUniform1f(glGetUniformLocation(compute_program, "tau"), 0.6f);
+        glUniform1f(glGetUniformLocation(compute_program, "U0"), U0);
+        glUniform1f(glGetUniformLocation(compute_program, "tau"), tau);
         glDispatchCompute(width / 16, height / 16, 1);
         glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
 
@@ -333,6 +532,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine,
         ImGui::NewFrame();
 
         ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
+        ImGui::Begin("Controls");
+        ImGui::SliderFloat("U0", &U0, 0.01f, 0.2f);
+        ImGui::SliderFloat("tau", &tau, 0.6f, 2.0f);
+        ImGui::End();
 
         ImGui::Render();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
