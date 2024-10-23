@@ -119,9 +119,11 @@ void main() {
     // Streaming step
     ivec2 nextPos;
     for (int i = 0; i < 9; i++) {
-        nextPos = ivec2(gl_GlobalInvocationID.xy) - ivec2(velocities[i]);
-        int nextIndex = nextPos.y * width + nextPos.x;
-        f_out[nextIndex * 9 + i] = f[i];
+        nextPos = ivec2(gl_GlobalInvocationID.xy) + ivec2(velocities[i]);
+        if (nextPos.x >= 0 && nextPos.x < width && nextPos.y >= 0 && nextPos.y < height) {
+            int nextIndex = nextPos.y * width + nextPos.x;
+            f_out[nextIndex * 9 + i] = f[i];
+        }
     }
 }
 )glsl";
@@ -348,7 +350,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine,
     // const float Re = 100.0f;       // Reynolds number
     // float nu = U0 * L / Re;        // kinematic viscosity
     // float tau = 3.0f * nu + 0.5f;  // relaxation time
-    float tau = 0.6f;
+    float tau = 1.0f;
 
     // Initialize distribution functions with a uniform flow from right to left
     float rho0 = 1.0f;
@@ -370,6 +372,19 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine,
         for (int x = 0; x < width; x++)
         {
             int idx = (y * width + x) * num_velocities;
+
+            // Barycentric coordinate calculation
+            float d = (v2.Y - v3.Y) * (v1.X - v3.X) + (v3.X - v2.X) * (v1.Y - v3.Y);
+            float a = ((v2.Y - v3.Y) * (x - v3.X) + (v3.X - v2.X) * (y - v3.Y)) / d;
+            float b = ((v3.Y - v1.Y) * (x - v3.X) + (v1.X - v3.X) * (y - v3.Y)) / d;
+            float c = 1 - a - b;
+
+            if (a >= 0 && a <= 1 && b >= 0 && b <= 1 && c >= 0 && c <= 1)
+            {
+                for (int i = 0; i < num_velocities; i++)
+                    f_in[idx + i] = 0;
+                continue;
+            }
             float ux = ux0;
             float uy = uy0;
             float rho = rho0;
