@@ -382,7 +382,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine,
             int idx = (y * width + x) * num_velocities;
 
             float ux, uy;
-            float rho = rho0;
             if (isInTriangle(x, y, v1, v2, v3))
             {
                 ux = 0;
@@ -399,7 +398,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine,
                 float cu = velocities[i].X * ux + velocities[i].Y * uy;
                 float usqr = ux * ux + uy * uy;
                 f_in[idx + i] =
-                    weights[i] * rho * (1.0f + 3.0f * cu + 4.5f * cu * cu - 1.5f * usqr);
+                    weights[i] * rho0 * (1.0f + 3.0f * cu + 4.5f * cu * cu - 1.5f * usqr);
             }
         }
     }
