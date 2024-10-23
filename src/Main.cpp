@@ -19,7 +19,160 @@
 #include <utility>
 
 #include "OpenGLHelpers.h"
-#include "Shader.h"
+
+const char* kComputeShader = R"glsl(
+#version 460 core
+
+layout(local_size_x = 16, local_size_y = 16) in;
+
+layout(std430, binding = 0) buffer DF_In {
+    float f_in[];
+};
+
+layout(std430, binding = 1) buffer DF_Out {
+    float f_out[];
+};
+
+uniform int width;
+uniform int height;
+uniform float tau; // Relaxation time
+
+const vec2 velocities[9] = vec2[9](
+    vec2(-1, 1), vec2(0, 1), vec2(1, 1),
+    vec2(-1, 0), vec2(0, 0), vec2(1, 0),
+    vec2(-1, -1), vec2(0, -1), vec2(1, -1)
+);
+
+const float weights[9] = float[9](
+    1.0f/36, 1.0f/9, 1.0f/36,
+    1.0f/9, 4.0f/9, 1.0f/9,
+    1.0f/36, 1.0f/9, 1.0f/36
+);
+
+void main() {
+    ivec2 gid = ivec2(gl_GlobalInvocationID.xy);
+    int index = gid.y * width + gid.x;
+
+    float f[9];
+    for (int i = 0; i < 9; i++) {
+        f[i] = f_in[index * 9 + i];
+    }
+
+    float density = 0.0;
+    vec2 velocity = vec2(0.0);
+    for (int i = 0; i < 9; i++) {
+        density += f[i];
+        velocity += f[i] * velocities[i];
+    }
+    velocity /= density;
+
+    // Compute equilibrium distribution functions
+    float feq[9];
+    for (int i = 0; i < 9; i++) {
+        float velDotC = dot(velocities[i], velocity);
+        float velSq = dot(velocity, velocity);
+        feq[i] = weights[i] * density * (1.0 + 3.0 * velDotC + 4.5 * velDotC * velDotC - 1.5 * velSq);
+    }
+
+    // Collision step
+    for (int i = 0; i < 9; i++) {
+        f[i] += -(f[i] - feq[i]) / tau;
+    }
+
+    // Streaming step with periodic boundaries
+    ivec2 nextPos;
+    for (int i = 0; i < 9; i++) {
+        nextPos = ivec2(gl_GlobalInvocationID.xy) - ivec2(velocities[i]);
+
+        // Apply periodic boundary conditions
+        nextPos.x = (nextPos.x + width) % width;
+        nextPos.y = (nextPos.y + height) % height;
+
+        int nextIndex = nextPos.y * width + nextPos.x;
+        f_out[nextIndex * 9 + i] = f[i];
+    }
+}
+)glsl";
+
+const char* kFragmentShader = R"glsl(
+#version 460 core
+
+out vec4 FragColor;
+
+in vec2 TexCoords;
+
+// Simulation parameters
+uniform int width;
+uniform int height;
+uniform float U0; // Initial maximum speed for normalization
+
+layout(std430, binding = 0) buffer DF_In {
+    float f_in[];
+};
+
+// D2Q9 model velocities
+const vec2 velocities[9] = vec2[9](
+    vec2(-1, 1), vec2(0, 1), vec2(1, 1),
+    vec2(-1, 0), vec2(0, 0), vec2(1, 0),
+    vec2(-1, -1), vec2(0, -1), vec2(1, -1)
+);
+
+void main()
+{
+    // Compute pixel coordinates
+    int x = int(TexCoords.x * float(width));
+    int y = int(TexCoords.y * float(height));
+
+    if (x >= width || y >= height)
+    {
+        FragColor = vec4(0.0);
+        return;
+    }
+
+    int index = y * width + x;
+
+    float f[9];
+    for (int i = 0; i < 9; i++)
+    {
+        f[i] = f_in[index * 9 + i];
+    }
+
+    float density = 0.0;
+    vec2 velocity = vec2(0.0);
+    for (int i = 0; i < 9; i++)
+    {
+        density += f[i];
+        velocity += f[i] * velocities[i];
+    }
+    velocity /= density;
+
+    float speed = length(velocity);
+
+    // Normalize speed for color mapping
+    float normalizedSpeed = speed / U0;
+    normalizedSpeed = clamp(normalizedSpeed, 0.0, 1.0);
+
+    // Map normalized speed to color (e.g., from blue to red)
+    vec3 color = vec3(normalizedSpeed, 0.0, 1.0 - normalizedSpeed);
+
+    FragColor = vec4(color, 1.0);
+}
+)glsl";
+
+const char* kVertexShader = R"glsl(
+#version 460 core
+
+layout(location = 0) in vec2 aPos;
+layout(location = 1) in vec2 aTexCoords;
+
+out vec2 TexCoords;
+
+void main()
+{
+    TexCoords = aTexCoords;
+    gl_Position = vec4(aPos, 0.0, 1.0);
+}
+)glsl";
 
 // clang-format off
 float quadVertices[] = {
@@ -82,11 +235,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine,
     const float weights[9] = {1.0f / 36.0f, 1.0f / 9.0f,  1.0f / 36.0f, 1.0f / 9.0f, 4.0f / 9.0f,
                               1.0f / 9.0f,  1.0f / 36.0f, 1.0f / 9.0f,  1.0f / 36.0f};
 
-    const float L = 1.0f;       // Domain length
-    const float U0 = 0.1f;      // Velocity amplitude
-    const float dx = L / width; // Lattice spacing
-    const float dy = L / height;
-    const float rho0 = 1.0f; // Initial density
+
+    float U0 = 1; // Starting velocity of the flow.
+    const float L = 10; // Domain length in meters, the span of the delta wing
+    const float Re = 100; // Reynolds number
+
 
     GLuint ssbo[2];
     glGenBuffers(2, ssbo);
@@ -109,37 +262,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine,
     LinkProgram(compute_program);
 
     std::vector<float> f_in(width * height * num_velocities);
-
-    // Loop over each lattice point
-    for (int y = 0; y < height; y++)
-    {
-        for (int x = 0; x < width; x++)
-        {
-            // Compute physical coordinates
-            float xpos = x * dx;
-            float ypos = y * dy;
-
-            // Compute initial velocity components
-            float u = U0 * sin(2.0f * M_PI * xpos / L) * cos(2.0f * M_PI * ypos / L);
-            float v = -U0 * cos(2.0f * M_PI * xpos / L) * sin(2.0f * M_PI * ypos / L);
-
-            // Compute equilibrium distribution functions
-            float feq[num_velocities];
-            float velocity[2] = {u, v};
-            float density = rho0;
-
-            for (int i = 0; i < num_velocities; i++)
-            {
-                float ei_dot_u = velocities[i].X * u + velocities[i].Y * v;
-                float u_sq = u * u + v * v;
-                feq[i] = weights[i] * density *
-                         (1.0f + 3.0f * ei_dot_u + 4.5f * ei_dot_u * ei_dot_u - 1.5f * u_sq);
-                // Store in the distribution function array
-                int index = (y * width + x) * num_velocities + i;
-                f_in[index] = feq[i];
-            }
-        }
-    }
 
     // Upload the initialized distribution functions to the GPU
     glNamedBufferSubData(ssbo[0], 0, bufferSize, f_in.data());
