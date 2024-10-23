@@ -54,6 +54,8 @@ const float weights[9] = float[9](
     1.0f/36, 1.0f/9, 1.0f/36
 );
 
+const int opp[9] = int[9](8, 7, 6, 5, 4, 3, 2, 1, 0);
+
 bool isSolid(int x, int y) {
     int bit_index = y * width + x;
     uint word_index = bit_index / 32;
@@ -69,8 +71,7 @@ void main() {
     if (isSolid(gid.x, gid.y)) {
         // Bounce-back boundary condition for solid
         for (int i = 0; i < 9; i++) {
-            int opp = 8 - i; // Opposite direction
-            f_out[index * 9 + i] = f_in[index * 9 + opp];
+            f_out[index * 9 + i] = f_in[index * 9 + opp[i]];
         }
         return;
     }
@@ -90,8 +91,8 @@ void main() {
     velocity /= density;
 
     // Boundary handling goes here
-    if (gid.x == 0) { // Inlet (left boundary)
-        velocity = vec2(-U0, 0.0);
+    if (gid.x == width - 1 || gid.x == 0) { // Left and right boundaries
+        velocity = vec2(-U0, 0.0); // Negative velocity for flow to the left
         density = 1.0;
         // Set equilibrium distribution for inlet
         for (int i = 0; i < 9; i++) {
@@ -100,16 +101,8 @@ void main() {
             f[i] = weights[i] * density * (1.0 + 3.0 * velDotC + 4.5 * velDotC * velDotC - 1.5 * velSq);
         }
     }
-    else if (gid.x == width-1) { // Outlet (right boundary)
-        // Zero gradient outlet - copy from previous node
-        ivec2 prev = ivec2(gid.x - 1, gid.y);
-        int prevIdx = prev.y * width + prev.x;
-        for (int i = 0; i < 9; i++) {
-            f[i] = f_in[prevIdx * 9 + i];
-        }
-    }
     else if (gid.y == 0 || gid.y == height-1) { // Top and bottom boundaries
-        // No-slip boundary condition
+        // No-slip boundary condition (should it be no slip???)
         velocity = vec2(0.0, 0.0);
         // Set equilibrium distribution for wall
         for (int i = 0; i < 9; i++) {
@@ -212,6 +205,11 @@ void main()
     float vx = velocity.x;
     float vy = velocity.y;
 
+    if (isinf(speed) || isinf(density)) {
+        FragColor = vec4(0.0, 0.0, 0.0, 1.0); // Black for invalid values
+        return;
+    }
+
     // Normalize speed for color mapping
     float normalizedSpeed = speed / U0;
     normalizedSpeed = clamp(normalizedSpeed, 0.0, 1.0);
@@ -251,12 +249,10 @@ void main()
 
     float vorticity = dvx_dy - dvy_dx;
 
-    vec3 color;
-    float speedScale = 2.0; // Adjust this value to make the visualization more visible
-    normalizedSpeed = clamp(speed * speedScale / U0, 0.0, 1.0);
+    normalizedSpeed = clamp(speed / U0, 0.0, 1.0);
 
-    // Simple blue to red color mapping
-    color = vec3(normalizedSpeed, 0.0, 1.0 - normalizedSpeed);
+    // Color mapping
+    vec3 color = vec3(normalizedSpeed, 0.0, 1.0 - normalizedSpeed);
 
     // Add vorticity visualization
     float vort_intensity = abs(vorticity) * 0.5;
@@ -384,7 +380,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine,
     glAttachShader(compute_program, compute_shader);
     LinkProgram(compute_program);
 
-    float U0 = 0.1f;               // Increase initial velocity slightly
+    float U0 = 0.1f;               // Flow velocity
     const float L = width / 10.0f; // Characteristic length
     const float Re = 100.0f;       // Reynolds number
     float nu = U0 * L / Re;        // kinematic viscosity
@@ -401,13 +397,13 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine,
         for (int x = 0; x < width; x++)
         {
             int idx = (y * width + x) * num_velocities;
-            float ux = -U0; // Flow from right to left
-            float uy = 0.0f;
-            float rho = 1.0f;
+            float ux = ux0;
+            float uy = uy0;
+            float rho = rho0;
 
             if (isInsideTriangle(x, y, width, height))
             {
-                // Zero velocity for solid nodes
+                // Zero velocity for solid nodes (wing)
                 ux = 0.0f;
                 uy = 0.0f;
             }
@@ -512,7 +508,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine,
         glUniform1f(glGetUniformLocation(compute_program, "U0"), U0);
         glUniform1f(glGetUniformLocation(compute_program, "tau"), tau);
         glDispatchCompute(width / 16, height / 16, 1);
-        glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+        glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT | GL_BUFFER_UPDATE_BARRIER_BIT);
 
         // Render the visualization
         glClear(GL_COLOR_BUFFER_BIT);
@@ -532,10 +528,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine,
         ImGui::NewFrame();
 
         ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
-        ImGui::Begin("Controls");
         ImGui::SliderFloat("U0", &U0, 0.01f, 0.2f);
         ImGui::SliderFloat("tau", &tau, 0.6f, 2.0f);
-        ImGui::End();
 
         ImGui::Render();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
