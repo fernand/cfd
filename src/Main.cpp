@@ -83,9 +83,8 @@ void main() {
             int neighborIndex = neighborPos.y * width + neighborPos.x;
             f[i] = f_in[neighborIndex * 9 + i];
         } else {
-            // Apply boundary conditions depending on which boundary it is
+            // Equilibrium boundaries
             if (neighborPos.x < 0 || neighborPos.x >= width || neighborPos.y < 0 || neighborPos.y >= height) {
-                // Left boundary (inlet)
                 float density = 1.0;
                 vec2 velocity = vec2(U0, 0.0);
                 float velDotC = dot(vec2(velocities[i]), velocity);
