@@ -388,7 +388,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine,
                 int bit_index = y * width + x;
                 solid_cells[bit_index / 32] |= (1u << (bit_index % 32));
             }
-            else {
+            else
+            {
                 ux = ux0;
                 uy = uy0;
             }
