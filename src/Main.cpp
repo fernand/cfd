@@ -351,11 +351,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine,
     glAttachShader(compute_program, compute_shader);
     LinkProgram(compute_program);
 
-    float U0 = 0.1f;               // Initial velocity slightly
-    const float L = 128; // Characteristic length
-    const float Re = 100.0f;       // Reynolds number
-    float nu = U0 * L / Re;        // kinematic viscosity
-    float tau = 3.0f * nu + 0.5f;  // relaxation time
+    float U0 = 0.075f;            // Initial velocity slightly
+    const float L = 128;          // Characteristic length
+    const float Re = 100.0f;      // Reynolds number
+    float nu = U0 * L / Re;       // kinematic viscosity
+    float tau = 3.0f * nu + 0.5f; // relaxation time
 
     // Initialize distribution functions with a uniform flow from right to left
     float rho0 = 1.0f;
@@ -454,15 +454,14 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine,
 
     while (!glfwWindowShouldClose(window))
     {
-        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssbo[0]);      // f_in
-        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, ssbo[1]);      // f_out
-        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, solid_buffer); // solid cells
-
         glUseProgram(compute_program);
         glUniform1i(glGetUniformLocation(compute_program, "width"), width);
         glUniform1i(glGetUniformLocation(compute_program, "height"), height);
         glUniform1f(glGetUniformLocation(compute_program, "U0"), U0);
         glUniform1f(glGetUniformLocation(compute_program, "tau"), tau);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssbo[0]);      // f_in
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, ssbo[1]);      // f_out
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, solid_buffer); // solid cells
         glDispatchCompute(width / 16, height / 16, 1);
         glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT | GL_BUFFER_UPDATE_BARRIER_BIT);
 
@@ -471,6 +470,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine,
         glUniform1i(glGetUniformLocation(render_program, "width"), width);
         glUniform1i(glGetUniformLocation(render_program, "height"), height);
         glUniform1f(glGetUniformLocation(render_program, "U0"), U0);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, ssbo[1]); // f_out
         glBindVertexArray(quadVAO);
         glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
 
