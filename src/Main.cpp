@@ -77,12 +77,12 @@ void main() {
     float f[9];
     for (int i = 0; i < 9; i++) {
         ivec2 neighborPos = gid - velocities[i];
-        if (neighborPos.x >= 0 && neighborPos.x < width && neighborPos.y >= 0 && neighborPos.y < height) {
+        if (neighborPos.x > 0 && neighborPos.x < width - 1 && neighborPos.y > 0 && neighborPos.y < height - 1) {
             int neighborIndex = neighborPos.y * width + neighborPos.x;
             f[i] = f_in[neighborIndex * 9 + i];
         } else {
             // Equilibrium boundaries
-            if (neighborPos.x < 0 || neighborPos.x >= width || neighborPos.y < 0 || neighborPos.y >= height) {
+            if (neighborPos.x == 0 || neighborPos.x == width - 1 || neighborPos.y == 0 || neighborPos.y == height - 1) {
                 float density = 1.0;
                 vec2 velocity = vec2(U0, 0.0);
                 float velDotC = dot(vec2(velocities[i]), velocity);
@@ -294,8 +294,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine,
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-    const int width = 1920;
-    const int height = 1080;
+    const int width = 512 * 4;
+    const int height = 512;
     const GLFWvidmode* mode = glfwGetVideoMode(glfwGetPrimaryMonitor());
     GLFWwindow* window = glfwCreateWindow(width, height, "CFD", nullptr, nullptr);
     if (window == nullptr)
@@ -304,7 +304,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine,
     int kWindowWidth = 0;
     int kWindowHeight = 0;
     glfwGetWindowSize(window, &kWindowWidth, &kWindowHeight);
-    glfwSwapInterval(1); // Enable vsync
+    // glfwSwapInterval(1); // Enable vsync
 
     bool glad_err = gladLoadGL(glfwGetProcAddress) == 0;
     if (glad_err)
@@ -362,10 +362,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine,
     float ux0 = U0;
     float uy0 = 0.0f;
 
-    float centerX = width / 4.0f;
-    float centerY = height / 2.0f;
-    float wingLength = width / 4.0f;
-    float wingHeight = wingLength / 2.25f;
+    float centerX = 380;
+    float centerY = 512.0f/2;
+    float wingLength = 680;
+    float wingHeight = 320;
 
     HMM_Vec2 v1 = {centerX - wingLength / 2, centerY};                  // tip
     HMM_Vec2 v2 = {centerX + wingLength / 2, centerY - wingHeight / 2}; // bottom right
