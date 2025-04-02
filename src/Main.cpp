@@ -357,13 +357,13 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine,
     float nu = U0 * L / Re;       // kinematic viscosity
     float tau = 3.0f * nu + 0.5f; // relaxation time
 
-    // Initialize distribution functions with a uniform flow from right to left
+    // Initialize distribution functions with a uniform flow from left to right
     float rho0 = 1.0f;
     float ux0 = U0;
     float uy0 = 0.0f;
 
     float centerX = 380;
-    float centerY = 512.0f/2;
+    float centerY = 512.0f / 2;
     float wingLength = 680;
     float wingHeight = 320;
 
