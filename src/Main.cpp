@@ -364,8 +364,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine,
 
     float centerX = 380;
     float centerY = 512.0f / 2;
-    float wingLength = 680;
-    float wingHeight = 320;
+    float wingLength = 680 / 4;
+    float wingHeight = 320 / 4;
 
     HMM_Vec2 v1 = {centerX - wingLength / 2, centerY};                  // tip
     HMM_Vec2 v2 = {centerX + wingLength / 2, centerY - wingHeight / 2}; // bottom right
